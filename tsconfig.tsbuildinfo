@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/audio.ts","./src/constants.ts","./src/main.tsx","./src/vite-env.d.ts","./src/components/bellripple.tsx","./src/components/controls.tsx","./src/components/timercircle.tsx","./src/hooks/usetimer.ts"],"version":"5.8.3"}

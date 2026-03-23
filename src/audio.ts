@@ -1,0 +1,91 @@
+let ctx: AudioContext | null = null
+
+function getContext(): AudioContext {
+  if (!ctx) {
+    ctx = new AudioContext()
+  }
+  if (ctx.state === 'suspended') {
+    ctx.resume()
+  }
+  return ctx
+}
+
+/**
+ * Synthesize a singing bowl strike.
+ * Uses a cluster of sine waves with exponential decay.
+ */
+function createBowlStrike(
+  audioCtx: AudioContext,
+  frequency: number,
+  duration: number,
+  volume: number,
+): AudioBufferSourceNode {
+  const sampleRate = audioCtx.sampleRate
+  const length = sampleRate * duration
+  const buffer = audioCtx.createBuffer(1, length, sampleRate)
+  const data = buffer.getChannelData(0)
+
+  // Harmonics that make it sound like a singing bowl
+  const harmonics = [
+    { freq: frequency, amp: 1.0, decay: 2.0 },
+    { freq: frequency * 2.76, amp: 0.4, decay: 3.0 },
+    { freq: frequency * 5.4, amp: 0.15, decay: 4.5 },
+    { freq: frequency * 8.93, amp: 0.06, decay: 6.0 },
+  ]
+
+  for (let i = 0; i < length; i++) {
+    const t = i / sampleRate
+    let sample = 0
+    for (const h of harmonics) {
+      sample += h.amp * Math.sin(2 * Math.PI * h.freq * t) * Math.exp(-t * h.decay)
+    }
+    // Soft attack
+    const attack = Math.min(1, t * 50)
+    data[i] = sample * volume * attack
+  }
+
+  const source = audioCtx.createBufferSource()
+  source.buffer = buffer
+  return source
+}
+
+export type BellType = 'start' | 'reminder' | 'end'
+
+const BELL_PARAMS: Record<BellType, { freq: number; duration: number; volume: number }> = {
+  start: { freq: 220, duration: 4, volume: 0.5 },
+  reminder: { freq: 280, duration: 3, volume: 0.3 },
+  end: { freq: 220, duration: 5, volume: 0.5 },
+}
+
+export function playBell(type: BellType): void {
+  const audioCtx = getContext()
+  const params = BELL_PARAMS[type]
+  const source = createBowlStrike(audioCtx, params.freq, params.duration, params.volume)
+  source.connect(audioCtx.destination)
+  source.start()
+}
+
+export function playStartBells(): void {
+  // Three bells staggered
+  playBell('start')
+  setTimeout(() => playBell('start'), 2000)
+  setTimeout(() => playBell('start'), 4000)
+}
+
+export function playEndBells(): void {
+  // Three bells staggered
+  playBell('end')
+  setTimeout(() => playBell('end'), 2000)
+  setTimeout(() => playBell('end'), 4000)
+}
+
+export function vibrate(): void {
+  if (navigator.vibrate) {
+    navigator.vibrate(200)
+  }
+}
+
+export function initAudio(): void {
+  // Create and immediately resume AudioContext on user gesture
+  getContext()
+}
