@@ -1,13 +1,43 @@
 let ctx: AudioContext | null = null
+let unlocked = false
 
 function getContext(): AudioContext {
   if (!ctx) {
-    ctx = new AudioContext()
+    const Ctor: typeof AudioContext =
+      window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    ctx = new Ctor()
+
+    // iOS 16.4+: route audio to the "playback" category so the chimes are
+    // audible even when the phone's ring/silent switch is set to silent —
+    // otherwise Web Audio is muted by the hardware switch.
+    const audioSession = (navigator as unknown as { audioSession?: { type: string } }).audioSession
+    if (audioSession) {
+      try {
+        audioSession.type = 'playback'
+      } catch {
+        // Category not settable; ignore.
+      }
+    }
   }
   if (ctx.state === 'suspended') {
     ctx.resume()
   }
   return ctx
+}
+
+/**
+ * Unlock the AudioContext on iOS by playing a silent buffer inside the
+ * user gesture. Without this, the first real sound can be dropped because
+ * resume() is async and the context is still suspended when it fires.
+ */
+function unlock(audioCtx: AudioContext): void {
+  if (unlocked) return
+  const buffer = audioCtx.createBuffer(1, 1, audioCtx.sampleRate)
+  const source = audioCtx.createBufferSource()
+  source.buffer = buffer
+  source.connect(audioCtx.destination)
+  source.start(0)
+  unlocked = true
 }
 
 /**
@@ -86,6 +116,7 @@ export function vibrate(): void {
 }
 
 export function initAudio(): void {
-  // Create and immediately resume AudioContext on user gesture
-  getContext()
+  // Create, resume, and unlock the AudioContext on a user gesture. Must run
+  // synchronously inside the tap handler for iOS Safari to allow later playback.
+  unlock(getContext())
 }
